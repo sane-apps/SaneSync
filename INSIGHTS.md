@@ -96,6 +96,85 @@ User loved this - everything sorts to top, clear categories.
 
 ---
 
+## Technical Requirements (What We Actually Used)
+
+### Minimum macOS Version
+- **Used:** macOS 26.2 (Tahoe) on Apple Silicon
+- **Minimum viable:** macOS 13+ (Ventura) - needs modern Swift concurrency, SwiftUI features
+- **Recommended:** macOS 14+ (Sonoma) for best SwiftUI/Observable support
+
+### System Tools Used (All Built-in)
+```
+osascript          # AppleScript execution (Photos import)
+find               # File discovery
+mv / cp / rm       # File operations
+mkdir              # Directory creation
+launchctl          # Scheduled task management
+```
+
+### External Tools Used
+```
+rclone             # Cloud provider sync (Google Drive, Dropbox, etc.)
+                   # Install: brew install rclone
+                   # Config: rclone config (OAuth flow)
+```
+
+### Claude API
+```
+Model: claude-opus-4-5-20251101 (or claude-sonnet for cheaper operations)
+SDK: Anthropic Swift SDK or direct REST API
+Auth: API key from console.anthropic.com
+```
+
+### File System Paths Used
+```
+# iCloud Drive (local folder - no API needed)
+~/Library/Mobile Documents/com~apple~CloudDocs/
+
+# Apple Music auto-import
+~/Music/Music/Media.localized/Automatically Add to Music.localized/
+
+# Photos.app - accessed via AppleScript, no direct path needed
+
+# Trash (safe delete destination)
+~/.Trash/
+
+# rclone config
+~/.config/rclone/rclone.conf
+
+# launchd user agents
+~/Library/LaunchAgents/
+```
+
+### Entitlements Needed
+```xml
+<!-- For file access outside sandbox -->
+<key>com.apple.security.app-sandbox</key>
+<false/>
+
+<!-- Or if sandboxed, need these: -->
+<key>com.apple.security.files.user-selected.read-write</key>
+<true/>
+<key>com.apple.security.files.bookmarks.app-scope</key>
+<true/>
+
+<!-- For Claude API calls -->
+<key>com.apple.security.network.client</key>
+<true/>
+```
+
+### Privacy Permissions (System Prompts)
+- **Full Disk Access** - For accessing ~/Library/Mobile Documents/ and other protected paths
+- **Photos Access** - If integrating with Photos.app directly
+- **Automation** - For AppleScript control of Photos, Music, etc.
+
+### What the App Must Bundle or Require
+1. **rclone binary** - Either bundle it (~50MB) or require user install via Homebrew
+2. **Claude API key** - User provides, or developer proxies through backend
+3. **OAuth tokens** - Stored in Keychain for Google Drive, Dropbox, etc.
+
+---
+
 ## Mistakes Made (Build Safeguards For These)
 
 ### 1. Deleted Before Confirming
@@ -161,25 +240,25 @@ Before any delete:
 
 ---
 
-## Business Model Options
+## Business Philosophy
 
-### Option 1: User Brings API Key
-- App is free/cheap
-- User needs Claude API access ($20/mo or pay-per-use)
-- Simplest to build
-- Higher friction for users
+**Core principles:**
+- **Buy once** - No subscriptions. People have subscription fatigue.
+- **Privacy centric** - Files never leave the machine unless user explicitly syncs to cloud
+- **Mac native** - Swift/SwiftUI, not Electron bloat
+- **Simple to use** - Grandma-friendly eventually
+- **Updates for 2 years** - Then it's done, or pay for v2
 
-### Option 2: Developer Pays API
-- You proxy Claude calls through your backend
-- Users pay you (subscription or one-time)
-- ~$0.15-0.75 per "organize my stuff" session
-- Smoother UX, you control economics
+**API Cost Reality:**
+- ~$0.15-0.75 per "organize my stuff" session at current Claude API rates
+- Options: bundle X sessions with purchase, user brings own key, or hybrid
+- Buy-once model could work: $29-49 with ~20 included sessions, then user adds own key or buys session packs
 
-### Option 3: Hybrid
-- Free tier: X operations/month on developer's dime
-- Power users: pay for more or bring own key
-
-**Recommendation:** Start with Option 1 for MVP. Target power users who already have Claude. Validate product-market fit, then smooth UX with Option 2.
+**Avoid:**
+- Monthly subscriptions
+- Cloud-based processing (privacy concern)
+- Feature bloat
+- Cross-platform complexity (Mac-first, Mac-only is fine)
 
 ---
 
