@@ -29,6 +29,15 @@ LOG_FILE = File.expand_path('../../.claude/sanetrack.log', __dir__)
 EDIT_TOOLS = %w[Edit Write NotebookEdit].freeze
 FAILURE_TOOLS = %w[Bash Edit Write].freeze  # Tools that can fail and trigger circuit breaker
 
+# === MCP VERIFICATION TOOLS ===
+# Map MCP names to their read-only verification tools
+MCP_VERIFICATION_PATTERNS = {
+  memory: /^mcp__memory__(read_graph|search_nodes|open_nodes)$/,
+  apple_docs: /^mcp__apple-docs__/,
+  context7: /^mcp__context7__/,
+  github: /^mcp__github__(search_|get_|list_)/
+}.freeze
+
 # === RESEARCH TRACKING ===
 # Patterns to detect which research category a Task agent is completing
 RESEARCH_PATTERNS = {
@@ -135,6 +144,51 @@ def track_edit(tool_name, tool_input, tool_response)
     e[:last_file] = file_path
     e
   end
+end
+
+# === MCP VERIFICATION TRACKING ===
+# Track successful MCP tool calls to verify connectivity
+
+def track_mcp_verification(tool_name, success)
+  # Find which MCP this tool belongs to
+  mcp_name = nil
+  MCP_VERIFICATION_PATTERNS.each do |mcp, pattern|
+    if tool_name.match?(pattern)
+      mcp_name = mcp
+      break
+    end
+  end
+
+  return unless mcp_name
+
+  StateManager.update(:mcp_health) do |health|
+    health[:mcps] ||= {}
+    health[:mcps][mcp_name] ||= { verified: false, last_success: nil, last_failure: nil, failure_count: 0 }
+
+    if success
+      health[:mcps][mcp_name][:verified] = true
+      health[:mcps][mcp_name][:last_success] = Time.now.iso8601
+      # Don't reset failure_count - it's historical data
+
+      # Check if ALL MCPs are now verified
+      all_verified = MCP_VERIFICATION_PATTERNS.keys.all? do |mcp|
+        health[:mcps][mcp] && health[:mcps][mcp][:verified]
+      end
+
+      if all_verified && !health[:verified_this_session]
+        health[:verified_this_session] = true
+        health[:last_verified] = Time.now.iso8601
+        warn '✅ ALL MCPs VERIFIED - edits now allowed'
+      end
+    else
+      health[:mcps][mcp_name][:last_failure] = Time.now.iso8601
+      health[:mcps][mcp_name][:failure_count] = (health[:mcps][mcp_name][:failure_count] || 0) + 1
+    end
+
+    health
+  end
+rescue StandardError => e
+  warn "⚠️  MCP tracking error: #{e.message}"
 end
 
 def track_failure(tool_name, tool_response)
@@ -313,6 +367,9 @@ def process_result(tool_name, tool_input, tool_response)
     # Track failure (legacy count)
     track_failure(tool_name, tool_response)
 
+    # === MCP VERIFICATION: Track failures for MCP tools ===
+    track_mcp_verification(tool_name, false)
+
     # === INTELLIGENCE: Track by signature (3x same = trip, even with successes) ===
     response_str = tool_response.to_s[0..200]
     track_error_signature(error_sig, tool_name, response_str)
@@ -325,6 +382,9 @@ def process_result(tool_name, tool_input, tool_response)
     reset_failure_count(tool_name)
     track_edit(tool_name, tool_input, tool_response)
 
+    # === MCP VERIFICATION: Track successes for MCP tools ===
+    track_mcp_verification(tool_name, true)
+
     # === RULE #7: Tautology detection for test files ===
     tautology_warning = check_tautologies(tool_name, tool_input)
     warn tautology_warning if tautology_warning
@@ -333,6 +393,27 @@ def process_result(tool_name, tool_input, tool_response)
     log_action_for_learning(tool_name, tool_input, true, nil)
 
     log_action(tool_name, 'success')
+
+    # === GIT PUSH REMINDER ===
+    # After successful git commit, check if push is needed
+    if tool_name == 'Bash'
+      command = tool_input['command'] || tool_input[:command] || ''
+      if command.match?(/git\s+commit/i) && !command.match?(/git\s+push/i)
+        # Check for unpushed commits
+        ahead_check = `git status 2>/dev/null | grep -o "ahead of.*by [0-9]* commit"`
+        unless ahead_check.empty?
+          warn ''
+          warn '🚨 GIT PUSH REMINDER 🚨'
+          warn "   You committed but haven't pushed!"
+          warn "   Status: #{ahead_check.strip}"
+          warn ''
+          warn '   → Run: git push'
+          warn '   → READ ALL DOCUMENTATION before claiming done'
+          warn '   → Verify README is accurate and up to date'
+          warn ''
+        end
+      end
+    end
   end
 
   0  # PostToolUse always returns 0 (tool already executed)

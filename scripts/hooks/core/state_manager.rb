@@ -95,7 +95,23 @@ module StateManager
       triggers: {},       # { "word" => ["rule_N"] } - words that predict violations
       strengths: [],      # ["rule_N"] - rules with 100% compliance
       session_scores: []  # Last 10 SOP scores for variance detection
-    }
+    },
+    # === MCP VERIFICATION SYSTEM ===
+    # Tracks MCP health and ensures all MCPs verified before edits
+    mcp_health: {
+      verified_this_session: false,
+      last_verified: nil,
+      mcps: {
+        memory: { verified: false, last_success: nil, last_failure: nil, failure_count: 0 },
+        apple_docs: { verified: false, last_success: nil, last_failure: nil, failure_count: 0 },
+        context7: { verified: false, last_success: nil, last_failure: nil, failure_count: 0 },
+        github: { verified: false, last_success: nil, last_failure: nil, failure_count: 0 }
+      }
+    },
+    # === REFUSAL TO READ TRACKING ===
+    # Detects when AI is blocked repeatedly for same reason but keeps trying
+    # instead of reading the message and following instructions
+    refusal_tracking: {}
   }.freeze
 
   class << self
