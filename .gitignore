@@ -109,3 +109,9 @@ reports/
 # Generated output
 Output/
 .claude/audit_log.jsonl
+CLAUDE.md
+SESSION_HANDOFF.md
+SESSION_LOG.md
+DOCS_AUDIT_FINDINGS.md
+TESTING_RESULTS.md
+.claude/
