@@ -97,7 +97,7 @@ targets:
           CODE_SIGN_IDENTITY: "Apple Development"
           CODE_SIGN_ENTITLEMENTS: SaneSync/SaneSync.entitlements
         Release:
-          CODE_SIGN_IDENTITY: "Developer ID Application: Stephan Joseph (M78L6FXD48)"
+          CODE_SIGN_IDENTITY: "Developer ID Application"
           CODE_SIGN_ENTITLEMENTS: SaneSync/SaneSync.entitlements
     postCompileScripts:
       - script: |
